@@ -1,0 +1,13 @@
+{
+  "fetched_at": "2026-09-07T12:17:20.420070+00:00",
+  "notice_month": "2026-08-01",
+  "source_index_url": "https://fgj.sh.gov.cn/ggzlzfgsgg/",
+  "source_url": "https://fgj.sh.gov.cn/ggzlzfgsgg/20260812/4c2e9a0afbe84ddd827136cb576d0b21.html",
+  "source_title": "市筹公共租赁住房（公积金房源）信息（2026年8月）",
+  "existing_listings_count": 713,
+  "official_project_count": 14,
+  "already_in_existing_count": 1,
+  "new_candidate_count": 13,
+  "only_available": false,
+  "note": "候选行未写回 listings.csv；最低/最高租金缺失时按面积×平均租金/㎡估算，仍请人工核对区域、地址、实租和当期供应后再合并。"
+}

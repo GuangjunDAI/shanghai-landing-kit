@@ -16,6 +16,17 @@ SEC = (CFG.get("amap_js_security_code") or "").strip()
 CITY = (CFG.get("city") or "上海").strip()
 if not JS_KEY or "粘贴" in JS_KEY or not SEC or "粘贴" in SEC:
     sys.exit("[错误] config.json 里的 amap_js_key / amap_js_security_code 还没填(要【Web端 JS API】类型 Key 及其安全密钥)。")
+METRO_PATH = os.path.join(BASE, "metro_lines.json")
+try:
+    METRO_DOC = json.load(open(METRO_PATH, encoding="utf-8"))
+    METRO_LINES = METRO_DOC.get("lines", [])
+    METRO_STATIONS = METRO_DOC.get("stations", [])
+    if not isinstance(METRO_LINES, list):
+        raise ValueError("lines 不是数组")
+    if not isinstance(METRO_STATIONS, list):
+        raise ValueError("stations 不是数组")
+except Exception as e:
+    sys.exit(f"[错误] 地铁线路数据不可用:{e}。请确认 metro_lines.json 存在且为合法 JSON。")
 CACHE_PATH = os.path.join(BASE, "enrich_cache.json")
 if not os.path.exists(CACHE_PATH):
     sys.exit("[错误] 没找到 enrich_cache.json,请先运行 python enrich.py。")
@@ -65,6 +76,8 @@ for r in recs:
     })
 
 data_js = json.dumps(rows, ensure_ascii=False)
+metro_js = json.dumps(METRO_LINES, ensure_ascii=False)
+metro_stations_js = json.dumps(METRO_STATIONS, ensure_ascii=False)
 
 html = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -98,9 +111,24 @@ html = """<!DOCTYPE html>
   #modulebar .lbl { color:#bcd3f0; font-size:12.5px; flex:none; font-weight:600; }
   #modulebar a { color:#fff; font-size:12.5px; text-decoration:none; background:rgba(255,255,255,.14); border-radius:14px; padding:3px 12px; flex:none; transition:background .12s; }
   #modulebar a:hover { background:rgba(255,255,255,.3); }
+  #metrobar { display:flex; align-items:center; gap:7px; padding:6px 16px; background:#f7fafc; border-bottom:1px solid #e2e8ee; overflow-x:auto; }
+  #metrobar .metro-title { color:#0d366b; font-size:12.5px; font-weight:600; flex:none; }
+  #metrobar button { padding:3px 9px; border:1px solid #b8c6d4; border-radius:6px; background:#fff; color:#36516e; font-size:11.5px; cursor:pointer; flex:none; }
+  #metrobar button:hover { background:#eaf1fb; }
+  #metroChecks { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+  .metro-check { display:flex; align-items:center; gap:3px; padding:2px 5px; border:1px solid #d9e1e8; border-radius:12px; background:#fff; font-size:11.5px; color:#3b4a59; cursor:pointer; user-select:none; flex:none; }
+  .metro-check.off { opacity:.38; }
+  .metro-check input { margin:0; accent-color:#0d366b; }
+  .metro-swatch { width:10px; height:10px; border-radius:50%; border:1px solid rgba(0,0,0,.15); flex:none; }
+  #metroHint { color:#7a8794; font-size:10.5px; white-space:nowrap; }
+  .metro-station { display:flex; flex-direction:column; align-items:center; transform:translateY(-3px); pointer-events:none; }
+  .metro-station .dot { width:8px; height:8px; border-radius:50%; background:#fff; border:3px solid; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+  .metro-station .name { margin-top:2px; font-size:9px; line-height:1.1; color:#24313d; background:rgba(255,255,255,.86); padding:1px 3px; border-radius:3px; white-space:nowrap; text-shadow:0 0 1px #fff; }
   #main { flex:1; display:flex; min-height:0; }
   #map { flex:1; }
   #panel { width:330px; background:#fcfcfb; border-left:1px solid #e8e6e0; overflow-y:auto; }
+  #markInput { width:190px; padding:6px 10px; border:1px solid #d99a06; border-radius:8px; font-size:13px; }
+  #clearMarksBtn { padding:6px 10px; border:1px solid #d99a06; border-radius:8px; background:#fff; color:#a87804; font-size:12px; cursor:pointer; display:none; }
   #panelHead { padding:10px 14px 6px; position:sticky; top:0; background:#fcfcfb; z-index:2; border-bottom:1px solid #f0efec; }
   #panelHead h2 { font-size:13px; color:#52514e; font-weight:600; }
   #moreBtn, #allBtn, #stopBtn { margin:6px 6px 0 0; padding:4px 10px; border:1px solid #0d366b; color:#0d366b; background:#fff; border-radius:6px; font-size:12px; cursor:pointer; display:none; }
@@ -118,6 +146,9 @@ html = """<!DOCTYPE html>
   .dest-pin { display:flex; flex-direction:column; align-items:center; transform:translateY(-4px); }
   .dest-pin .core { width:18px; height:18px; border-radius:50%; background:#d03b3b; border:3px solid #fff; box-shadow:0 1px 6px rgba(0,0,0,.4); }
   .dest-pin .lbl { margin-top:3px; font-size:12px; font-weight:600; color:#7a1414; background:rgba(255,255,255,.92); padding:2px 8px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.2); white-space:nowrap; }
+  .place-pin { display:flex; flex-direction:column; align-items:center; transform:translateY(-4px); }
+  .place-pin .core { width:15px; height:15px; border-radius:50%; background:#d99a06; border:3px solid #fff; box-shadow:0 1px 6px rgba(0,0,0,.4); }
+  .place-pin .lbl { margin-top:3px; font-size:12px; font-weight:600; color:#795b00; background:rgba(255,255,255,.94); padding:2px 8px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,.2); white-space:nowrap; }
   .iw { font-size:12.5px; line-height:1.65; max-width:300px; color:#0b0b0b; }
   .iw h3 { font-size:14px; margin-bottom:2px; }
   .iw .dim { color:#52514e; }
@@ -125,7 +156,7 @@ html = """<!DOCTYPE html>
   .iw a { color:#256abf; text-decoration:none; }
   .iw .go { display:inline-block; margin-top:4px; margin-right:8px; padding:3px 10px; border:1px solid #256abf; border-radius:6px; font-size:12px; }
   .hint { font-size:11px; color:#8b8a85; }
-  @media (max-width:760px){ #panel{display:none;} #destInput{width:150px;} }
+  @media (max-width:760px){ #panel{display:none;} #destInput{width:150px;} #markInput{width:150px;} }
 </style>
 </head>
 <body>
@@ -133,6 +164,8 @@ html = """<!DOCTYPE html>
   <header>
     <h1>公租房 → <span id="destName">__DEST_NAME__</span></h1>
     <div class="ctl">🎯 <input id="destInput" placeholder="输入任意地点，如：陆家嘴 / 张江 / 某小区" autocomplete="off"></div>
+    <div class="ctl" title="选择联想结果即可在地图上增加一个地点标注，不会改变通勤目的地，也不会计算路线">📌 <input id="markInput" placeholder="搜索地点并标注，如学校/医院" autocomplete="off"></div>
+    <button id="clearMarksBtn" title="清除本机保存的所有地点标注">清除标注</button>
     <button id="resetBtn">↺ 回到__DEST_NAME__(全量精算)</button>
     <div class="seg" id="modeSeg">
       <button id="btnTransit" class="on">🚇 地铁/公交</button>
@@ -165,6 +198,13 @@ html = """<!DOCTYPE html>
     <a href="guide.html#xincheng">🏙 新城通勤</a>
     <a href="guide.html#list">✅ 30天清单</a>
   </div>
+  <div id="metrobar">
+    <span class="metro-title">🚇 地铁线路</span>
+    <button id="metroAllBtn">全选</button>
+    <button id="metroNoneBtn">全不选</button>
+    <div id="metroChecks"></div>
+    <span id="metroHint">静态线路图层，仅控制显示</span>
+  </div>
   <div id="main">
     <div id="map"></div>
     <div id="panel">
@@ -176,6 +216,8 @@ html = """<!DOCTYPE html>
 <script src="https://webapi.amap.com/loader.js"></script>
 <script>
 const LISTINGS = __DATA__;
+const METRO_LINES = __METRO_LINES__;
+const METRO_STATIONS = __METRO_STATIONS__;
 const APT_RE = /寓|店$|柚米|微领地|乐巢|自如|客栈|青年社区|小居|魔方|可遇|宸屿|有巢|驿栈|驿站/;
 LISTINGS.forEach((x, i) => { x.i = i; x.apt = APT_RE.test(x.n); });
 const PRESET = { lon: __DEST_LON__, lat: __DEST_LAT__, name: '__DEST_NAME__' };
@@ -201,6 +243,26 @@ let rentMax = null, distSel = '', aptSel = '', viewSel = '';
 function loadSet(k) { try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch (e) { return new Set(); } }
 const favSet = loadSet('gzf_fav_v1');
 const banSet = loadSet('gzf_ban_v1');
+const METRO_SELECTION_KEY = 'gzf_metro_lines_v2';
+const METRO_DEFAULT_LINES = new Set(['1', '3', '9', '11', '12']);
+function loadMetroSelection() {
+  try {
+    const a = JSON.parse(localStorage.getItem(METRO_SELECTION_KEY) || 'null');
+    if (Array.isArray(a)) return new Set(a.map(String).filter(id => METRO_LINES.some(line => line.id === id)));
+  } catch (e) { /* 使用默认线路 */ }
+  return new Set(METRO_LINES.map(line => line.id).filter(id => METRO_DEFAULT_LINES.has(String(id))));
+}
+const metroLineOn = loadMetroSelection();
+let metroPolylines = [];
+let metroStationMarkers = [];
+const PLACE_KEY = 'gzf_place_marks_v1';
+function loadPlaces() {
+  try {
+    const a = JSON.parse(localStorage.getItem(PLACE_KEY) || '[]');
+    return Array.isArray(a) ? a.filter(p => p && Number.isFinite(Number(p.lon)) && Number.isFinite(Number(p.lat)) && String(p.name || '').trim()) : [];
+  } catch (e) { return []; }
+}
+const savedPlaces = loadPlaces();
 function pkey(x) { return x.n + '|' + x.d; }
 function saveMarks() {
   try {
@@ -208,10 +270,136 @@ function saveMarks() {
     localStorage.setItem('gzf_ban_v1', JSON.stringify([...banSet]));
   } catch (e) { /* 隐私模式等场景:标记仅本次会话有效 */ }
 }
-let markers = [], infoWindow = null, gmap = null, destMarker = null, AMapRef = null;
+let markers = [], placeMarks = [], infoWindow = null, gmap = null, destMarker = null, AMapRef = null;
+
+function saveMetroSelection() {
+  try { localStorage.setItem(METRO_SELECTION_KEY, JSON.stringify([...metroLineOn])); } catch (e) { /* 仅本次会话有效 */ }
+}
+function refreshMetroLineVisibility() {
+  metroPolylines.forEach(o => o.polyline.setMap(metroLineOn.has(o.id) ? gmap : null));
+  document.querySelectorAll('#metroChecks .metro-check').forEach(el => {
+    el.classList.toggle('off', !metroLineOn.has(el.dataset.lineId));
+    const input = el.querySelector('input');
+    if (input) input.checked = metroLineOn.has(el.dataset.lineId);
+  });
+  refreshMetroStationVisibility();
+}
+function buildMetroControls() {
+  const checks = document.getElementById('metroChecks');
+  if (!checks) return;
+  checks.innerHTML = '';
+  METRO_LINES.forEach(line => {
+    const label = document.createElement('label');
+    label.className = 'metro-check' + (metroLineOn.has(line.id) ? '' : ' off');
+    label.dataset.lineId = line.id;
+    const input = document.createElement('input');
+    input.type = 'checkbox'; input.checked = metroLineOn.has(line.id);
+    input.onchange = () => {
+      if (input.checked) metroLineOn.add(line.id); else metroLineOn.delete(line.id);
+      saveMetroSelection(); refreshMetroLineVisibility();
+    };
+    const swatch = document.createElement('span');
+    swatch.className = 'metro-swatch'; swatch.style.background = line.color;
+    label.appendChild(input); label.appendChild(swatch); label.appendChild(document.createTextNode(line.name));
+    checks.appendChild(label);
+  });
+  document.getElementById('metroAllBtn').onclick = () => {
+    METRO_LINES.forEach(line => metroLineOn.add(line.id));
+    saveMetroSelection(); refreshMetroLineVisibility();
+  };
+  document.getElementById('metroNoneBtn').onclick = () => {
+    metroLineOn.clear(); saveMetroSelection(); refreshMetroLineVisibility();
+  };
+}
+function drawMetroLines() {
+  metroPolylines = [];
+  METRO_LINES.forEach(line => (line.paths || []).forEach(path => {
+    const polyline = new AMapRef.Polyline({
+      path: path, strokeColor: line.color, strokeWeight: 5, strokeOpacity: 0.82,
+      lineJoin: 'round', lineCap: 'round', zIndex: 5, bubble: false,
+    });
+    gmap.add(polyline);
+    metroPolylines.push({ id: line.id, polyline: polyline });
+  }));
+  refreshMetroLineVisibility();
+}
+function refreshMetroStationVisibility() {
+  metroStationMarkers.forEach(o => {
+    const visible = (o.station.lines || []).some(id => metroLineOn.has(String(id)));
+    o.marker.setMap(visible ? gmap : null);
+  });
+}
+function drawMetroStations() {
+  metroStationMarkers = [];
+  (METRO_STATIONS || []).forEach(st => {
+    const colors = (st.lines || []).map(id => {
+      const line = METRO_LINES.find(x => x.id === String(id));
+      return line && line.color;
+    }).filter(Boolean);
+    const color = colors[0] || '#5b6773';
+    const marker = new AMapRef.Marker({
+      position: [Number(st.lon), Number(st.lat)], zIndex: 160, anchor: 'top-center',
+      content: '<div class="metro-station"><span class="dot" style="border-color:' + color + '"></span><span class="name">' + esc(st.name) + '</span></div>',
+    });
+    gmap.add(marker);
+    metroStationMarkers.push({ marker: marker, station: st });
+  });
+  refreshMetroStationVisibility();
+}
 
 function esc(t) {
   return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function savePlaces() {
+  try {
+    localStorage.setItem(PLACE_KEY, JSON.stringify(placeMarks.map(p => ({ id: p.id, lon: p.lon, lat: p.lat, name: p.name }))));
+  } catch (e) { /* 隐私模式等场景:标注仅本次会话有效 */ }
+}
+function updatePlaceButton() {
+  const b = document.getElementById('clearMarksBtn');
+  if (!b) return;
+  b.textContent = placeMarks.length ? '清除标注 (' + placeMarks.length + ')' : '清除标注';
+  b.style.display = placeMarks.length ? 'inline-block' : 'none';
+}
+function placeInfoHtml(p) {
+  const pos = p.lon.toFixed(6) + ',' + p.lat.toFixed(6);
+  const amap = 'https://uri.amap.com/marker?position=' + p.lon + ',' + p.lat + '&name=' + encodeURIComponent(p.name);
+  return '<div class="iw"><h3>📌 ' + esc(p.name) + '</h3>' +
+    '<div class="dim">自定义地点标注 · 坐标 ' + pos + '</div>' +
+    '<a class="go" target="_blank" href="' + amap + '">在高德打开 ↗</a>' +
+    '<a class="go" href="javascript:void(0)" onclick="removePlace(&quot;' + p.id + '&quot;)" style="border-color:#c05f5f;color:#a33">删除标注</a></div>';
+}
+window.removePlace = function (id) {
+  const i = placeMarks.findIndex(p => p.id === id);
+  if (i < 0) return;
+  const p = placeMarks[i];
+  if (p.marker) p.marker.setMap(null);
+  placeMarks.splice(i, 1);
+  savePlaces();
+  updatePlaceButton();
+  infoWindow.close();
+};
+window.clearPlaces = function () {
+  if (!placeMarks.length || !confirm('清除本机保存的全部地点标注?')) return;
+  placeMarks.forEach(p => { if (p.marker) p.marker.setMap(null); });
+  placeMarks = [];
+  savePlaces();
+  updatePlaceButton();
+  infoWindow.close();
+};
+function addPlace(lon, lat, name, persist = true) {
+  if (!AMapRef || !gmap) return;
+  const p = { id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+              lon: Number(lon), lat: Number(lat), name: String(name || '地图标注').trim().slice(0, 80), marker: null };
+  p.marker = new AMapRef.Marker({
+    position: [p.lon, p.lat], zIndex: 180, anchor: 'top-center',
+    content: '<div class="place-pin"><div class="core"></div><div class="lbl">' + esc(p.name) + '</div></div>',
+  });
+  p.marker.on('click', () => { infoWindow.setContent(placeInfoHtml(p)); infoWindow.open(gmap, [p.lon, p.lat]); });
+  gmap.add(p.marker);
+  placeMarks.push(p);
+  if (persist) savePlaces();
+  updatePlaceButton();
 }
 function buckets() { return custom ? DIST_BUCKETS : TIME_BUCKETS; }
 function distKm(x) {
@@ -555,11 +743,15 @@ AMapLoader.load({
   gmap.addControl(new AMap.ToolBar({ position: { bottom: '90px', right: '14px' } }));
   infoWindow = new AMap.InfoWindow({ offset: new AMap.Pixel(0, -8), autoMove: true, closeWhenClickMap: true });
   AMapRef = AMap;
+  buildMetroControls();
+  drawMetroLines();
+  drawMetroStations();
   destMarker = new AMap.Marker({
     position: [PRESET.lon, PRESET.lat], zIndex: 200, anchor: 'top-center',
     content: '<div class="dest-pin"><div class="core"></div><div class="lbl">__DEST_NAME__</div></div>',
   });
   gmap.add(destMarker);
+  savedPlaces.forEach(p => addPlace(p.lon, p.lat, p.name, false));
   LISTINGS.forEach(x => {
     const mk = new AMap.CircleMarker({
       center: [x.lon, x.lat], radius: 6, fillOpacity: 0.88,
@@ -576,9 +768,16 @@ AMapLoader.load({
     if (!e.poi || !e.poi.location) return;
     setCustomDest(e.poi.location.getLng(), e.poi.location.getLat(), e.poi.name);
   });
+  const markAc = new AMap.AutoComplete({ input: 'markInput', city: '__CITY__', citylimit: true });
+  markAc.on('select', (e) => {
+    if (!e.poi || !e.poi.location) return;
+    addPlace(e.poi.location.getLng(), e.poi.location.getLat(), e.poi.name);
+    document.getElementById('markInput').value = '';
+  });
   gmap.on('rightclick', (e) => {
     setCustomDest(e.lnglat.getLng(), e.lnglat.getLat(), '地图选点');
   });
+  document.getElementById('clearMarksBtn').onclick = clearPlaces;
   document.getElementById('resetBtn').onclick = resetPreset;
   document.getElementById('exportBtn').onclick = exportFavs;
   document.getElementById('moreBtn').onclick = () => autoCompute(30);
@@ -659,7 +858,8 @@ bootMap();
 </html>
 """
 
-base = (html.replace("__DATA__", data_js)
+base = (html.replace("__DATA__", data_js).replace("__METRO_LINES__", metro_js)
+        .replace("__METRO_STATIONS__", metro_stations_js)
         .replace("__DEST_LON__", DEST_LON).replace("__DEST_LAT__", DEST_LAT)
         .replace("__DEST_NAME__", DEST_NAME).replace("__CITY__", CITY))
 open(OUT, "w", encoding="utf-8").write(base.replace("__JS_KEY__", JS_KEY).replace("__SEC_CODE__", SEC))
